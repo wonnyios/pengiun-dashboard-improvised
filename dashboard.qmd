@@ -32,7 +32,15 @@ h1, h2, h3, h4 {
   font-size: 14px;
 }
 
-/* Square summary cards */
+.card {
+  border-radius: 10px;
+}
+
+.card-body {
+  padding: 10px !important;
+}
+
+/* Summary cards */
 .bslib-value-box {
   aspect-ratio: 1 / 1;
   min-height: 150px;
@@ -45,16 +53,7 @@ h1, h2, h3, h4 {
   color: #FFFFFF !important;
 }
 
-/* Compact dashboard cards */
-.card {
-  border-radius: 10px;
-}
-
-.card-body {
-  padding: 8px !important;
-}
-
-/* Readable tables */
+/* Tables */
 .dataframe {
   font-size: 11px !important;
   width: 100%;
@@ -80,22 +79,42 @@ import numpy as np
 from palmerpenguins import load_penguins
 
 from plotnine import (
-    ggplot, aes, geom_col, geom_boxplot, geom_jitter,
-    geom_tile, geom_text, labs, theme_minimal, theme,
-    scale_fill_manual, scale_fill_gradient2
+    ggplot,
+    aes,
+    geom_col,
+    geom_boxplot,
+    geom_jitter,
+    geom_tile,
+    geom_text,
+    labs,
+    theme_minimal,
+    theme,
+    scale_fill_manual,
+    scale_fill_gradient2,
+    element_text
 )
 
 from scipy.stats import kruskal, chi2_contingency
 from IPython.display import display
 
-# Load and clean data
+# ---------------------------------------
+# LOAD AND CLEAN DATA
+# ---------------------------------------
+
 penguins = load_penguins()
 
 clean = penguins.dropna(
     subset=["species", "island"]
 ).copy()
 
-# Blue palette
+body_mass_data = clean.dropna(
+    subset=["body_mass_g"]
+).copy()
+
+# ---------------------------------------
+# BLUE COLOR PALETTE
+# ---------------------------------------
+
 species_colors = {
     "Adelie": "#173F73",
     "Chinstrap": "#438CCB",
@@ -108,13 +127,20 @@ island_colors = {
     "Torgersen": "#91C9F2"
 }
 
-# Summary metrics
+# ---------------------------------------
+# SUMMARY STATISTICS
+# ---------------------------------------
+
 total_penguins = len(clean)
 total_species = clean["species"].nunique()
 total_islands = clean["island"].nunique()
-average_body_mass = clean["body_mass_g"].mean()
 
-# Frequency tables
+average_body_mass = body_mass_data["body_mass_g"].mean()
+
+# ---------------------------------------
+# FREQUENCY DISTRIBUTIONS
+# ---------------------------------------
+
 species_counts = (
     clean["species"]
     .value_counts()
@@ -135,12 +161,10 @@ species_island_counts = (
     .reset_index(name="count")
 )
 
-# Body mass data
-body_mass_data = clean.dropna(
-    subset=["body_mass_g"]
-).copy()
+# ---------------------------------------
+# DESCRIPTIVE STATISTICS
+# ---------------------------------------
 
-# Descriptive statistics by species
 descriptive_stats = (
     body_mass_data.groupby("species")["body_mass_g"]
     .agg(
@@ -154,14 +178,14 @@ descriptive_stats = (
     .round(2)
 )
 
-# Overall descriptive statistics
 overall_stats = body_mass_data["body_mass_g"].agg(
     ["count", "mean", "median", "std", "min", "max"]
 ).round(2)
 
-# -------------------------------------
-# INFERENTIAL TEST 1: KRUSKAL-WALLIS
-# -------------------------------------
+# ---------------------------------------
+# INFERENTIAL TEST 1:
+# KRUSKAL-WALLIS TEST
+# ---------------------------------------
 
 species_order = ["Adelie", "Chinstrap", "Gentoo"]
 
@@ -179,6 +203,7 @@ kruskal_h = kruskal_result.statistic
 kruskal_p = kruskal_result.pvalue
 
 number_of_groups = len(body_mass_groups)
+
 body_mass_sample_size = sum(
     len(group) for group in body_mass_groups
 )
@@ -189,9 +214,10 @@ epsilon_squared = max(
     (body_mass_sample_size - number_of_groups)
 )
 
-# -------------------------------------
-# INFERENTIAL TEST 2: CHI-SQUARE
-# -------------------------------------
+# ---------------------------------------
+# INFERENTIAL TEST 2:
+# CHI-SQUARE TEST OF INDEPENDENCE
+# ---------------------------------------
 
 contingency_table = pd.crosstab(
     clean["species"],
@@ -213,13 +239,16 @@ cramers_v = np.sqrt(
     chi2 / (sample_size * minimum_dimension)
 )
 
-# Expected counts and Pearson residuals
+# Expected frequencies
 expected_table = pd.DataFrame(
     expected,
     index=contingency_table.index,
     columns=contingency_table.columns
 )
 
+minimum_expected = expected.min()
+
+# Pearson residuals
 pearson_residuals = (
     contingency_table - expected_table
 ) / np.sqrt(expected_table)
@@ -257,8 +286,6 @@ residual_data["label"] = residual_data.apply(
     ),
     axis=1
 )
-
-minimum_expected = expected.min()
 ```
 
 ## Row: Dashboard Summary {height="220px"}
@@ -436,7 +463,7 @@ display(
 
 The overall statistics describe body mass across all penguins with available measurements. The mean and median show the center of the data, while the standard deviation and range show its variability.
 
-## Row: Inferential Statistics {height="520px"}
+## Row: Inferential Statistics {height="600px"}
 
 ### 1. Kruskal-Wallis Test
 
@@ -454,7 +481,7 @@ body_mass_plot = (
     + geom_jitter(
         width=0.12,
         alpha=0.25,
-        size=1.2,
+        size=1.5,
         color="#173F73"
     )
     + scale_fill_manual(values=species_colors)
@@ -467,7 +494,11 @@ body_mass_plot = (
     + theme_minimal()
     + theme(
         legend_position="none",
-        figure_size=(5.5, 4)
+        figure_size=(6, 4.5),
+        axis_title=element_text(size=11),
+        axis_text=element_text(size=10),
+        plot_title=element_text(size=14, weight="bold"),
+        plot_subtitle=element_text(size=10)
     )
 )
 
@@ -492,7 +523,9 @@ kruskal_summary = pd.DataFrame({
     ]
 })
 
-display(kruskal_summary.style.hide(axis="index"))
+display(
+    kruskal_summary.style.hide(axis="index")
+)
 ```
 
 **Interpretation**
@@ -514,7 +547,7 @@ chi_square_plot = (
     + geom_tile(color="white")
     + geom_text(
         aes(label="label"),
-        size=8,
+        size=9,
         color="#173F73"
     )
     + scale_fill_gradient2(
@@ -532,7 +565,13 @@ chi_square_plot = (
     )
     + theme_minimal()
     + theme(
-        figure_size=(5.5, 4)
+        figure_size=(6, 4.5),
+        axis_title=element_text(size=11),
+        axis_text=element_text(size=10),
+        plot_title=element_text(size=14, weight="bold"),
+        plot_subtitle=element_text(size=10),
+        legend_title=element_text(size=10),
+        legend_text=element_text(size=9)
     )
 )
 
@@ -559,18 +598,16 @@ chi_square_summary = pd.DataFrame({
     ]
 })
 
-display(chi_square_summary.style.hide(axis="index"))
+display(
+    chi_square_summary.style.hide(axis="index")
+)
 ```
 
 **Interpretation**
 
 The chi-square test examines whether penguin species and island are associated. A p-value below 0.05 indicates evidence of an association. The heatmap displays observed counts and Pearson residuals: positive residuals indicate more observations than expected, while negative residuals indicate fewer.
 
-**Assumption check:** The minimum expected cell count is shown below. Some expected counts are below 5 in this dataset, so the usual chi-square approximation and its p-value should be interpreted cautiously.
-
-```{python}
-print(f"Minimum expected cell count: {minimum_expected:.2f}")
-```
+**Assumption Check:** The minimum expected cell count is 10.28, which is greater than 5. Therefore, the expected-frequency condition for the chi-square test is satisfied, supporting the use of the chi-square approximation.
 
 ## Row: Overall Conclusion {height="140px"}
 
