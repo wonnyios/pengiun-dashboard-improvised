@@ -2,7 +2,6 @@
 ---
 title: "Palmer Penguins Dashboard"
 subtitle: "Species and Island Distribution Analysis"
-author: "Giann Carlo Torino"
 format:
   dashboard:
     theme: cosmo
@@ -55,7 +54,7 @@ h1, h2, h3, h4 {
   padding: 8px !important;
 }
 
-/* Compact tables */
+/* Readable tables */
 .dataframe {
   font-size: 11px !important;
   width: 100%;
@@ -66,7 +65,8 @@ h1, h2, h3, h4 {
   font-weight: 700;
 }
 
-.dataframe td, .dataframe th {
+.dataframe td,
+.dataframe th {
   padding: 5px !important;
 }
 </style>
@@ -88,14 +88,14 @@ from plotnine import (
 from scipy.stats import kruskal, chi2_contingency
 from IPython.display import display
 
-# Load dataset
+# Load and clean data
 penguins = load_penguins()
 
 clean = penguins.dropna(
     subset=["species", "island"]
 ).copy()
 
-# Blue color palette
+# Blue palette
 species_colors = {
     "Adelie": "#173F73",
     "Chinstrap": "#438CCB",
@@ -108,14 +108,13 @@ island_colors = {
     "Torgersen": "#91C9F2"
 }
 
-# Summary statistics
+# Summary metrics
 total_penguins = len(clean)
 total_species = clean["species"].nunique()
 total_islands = clean["island"].nunique()
-
 average_body_mass = clean["body_mass_g"].mean()
 
-# Species counts
+# Frequency tables
 species_counts = (
     clean["species"]
     .value_counts()
@@ -123,7 +122,6 @@ species_counts = (
     .reset_index(name="count")
 )
 
-# Island counts
 island_counts = (
     clean["island"]
     .value_counts()
@@ -131,7 +129,6 @@ island_counts = (
     .reset_index(name="count")
 )
 
-# Species by island
 species_island_counts = (
     clean.groupby(["island", "species"])
     .size()
@@ -143,7 +140,7 @@ body_mass_data = clean.dropna(
     subset=["body_mass_g"]
 ).copy()
 
-# Descriptive statistics
+# Descriptive statistics by species
 descriptive_stats = (
     body_mass_data.groupby("species")["body_mass_g"]
     .agg(
@@ -157,13 +154,14 @@ descriptive_stats = (
     .round(2)
 )
 
+# Overall descriptive statistics
 overall_stats = body_mass_data["body_mass_g"].agg(
     ["count", "mean", "median", "std", "min", "max"]
 ).round(2)
 
-# ---------------------------------------
+# -------------------------------------
 # INFERENTIAL TEST 1: KRUSKAL-WALLIS
-# ---------------------------------------
+# -------------------------------------
 
 species_order = ["Adelie", "Chinstrap", "Gentoo"]
 
@@ -191,9 +189,9 @@ epsilon_squared = max(
     (body_mass_sample_size - number_of_groups)
 )
 
-# ---------------------------------------
+# -------------------------------------
 # INFERENTIAL TEST 2: CHI-SQUARE
-# ---------------------------------------
+# -------------------------------------
 
 contingency_table = pd.crosstab(
     clean["species"],
@@ -226,7 +224,7 @@ pearson_residuals = (
     contingency_table - expected_table
 ) / np.sqrt(expected_table)
 
-# Prepare heatmap
+# Prepare heatmap data
 residual_data = (
     pearson_residuals
     .reset_index()
@@ -259,6 +257,8 @@ residual_data["label"] = residual_data.apply(
     ),
     axis=1
 )
+
+minimum_expected = expected.min()
 ```
 
 ## Row: Dashboard Summary {height="220px"}
@@ -394,12 +394,18 @@ Adelie penguins are recorded on all three islands, while Gentoo penguins appear 
 ```{python}
 display(
     descriptive_stats.style
-    .format("{:.2f}", subset=["Mean", "Median", "SD", "Minimum", "Maximum"])
+    .format({
+        "Mean": "{:.2f}",
+        "Median": "{:.2f}",
+        "SD": "{:.2f}",
+        "Minimum": "{:.2f}",
+        "Maximum": "{:.2f}"
+    })
     .hide(axis="index")
 )
 ```
 
-The table summarizes the count, mean, median, standard deviation, minimum, and maximum body mass for each species. These metrics describe the typical body mass and variation within each group.
+The table summarizes the count, mean, median, standard deviation, minimum, and maximum body mass for each species. These metrics describe typical body mass and variation within each group.
 
 ### Overall Body Mass Statistics
 
@@ -430,7 +436,7 @@ display(
 
 The overall statistics describe body mass across all penguins with available measurements. The mean and median show the center of the data, while the standard deviation and range show its variability.
 
-## Row: Inferential Statistics {height="430px"}
+## Row: Inferential Statistics {height="520px"}
 
 ### 1. Kruskal-Wallis Test
 
@@ -448,19 +454,20 @@ body_mass_plot = (
     + geom_jitter(
         width=0.12,
         alpha=0.25,
-        size=1,
+        size=1.2,
         color="#173F73"
     )
     + scale_fill_manual(values=species_colors)
     + labs(
         title="Body Mass by Species",
-        x="Species",
+        subtitle="Kruskal-Wallis comparison",
+        x="Penguin Species",
         y="Body Mass (g)"
     )
     + theme_minimal()
     + theme(
         legend_position="none",
-        figure_size=(4, 3)
+        figure_size=(5.5, 4)
     )
 )
 
@@ -507,7 +514,7 @@ chi_square_plot = (
     + geom_tile(color="white")
     + geom_text(
         aes(label="label"),
-        size=7,
+        size=8,
         color="#173F73"
     )
     + scale_fill_gradient2(
@@ -518,13 +525,14 @@ chi_square_plot = (
     )
     + labs(
         title="Species and Island Association",
+        subtitle="Observed counts and Pearson residuals",
         x="Island",
-        y="Species",
+        y="Penguin Species",
         fill="Pearson Residual"
     )
     + theme_minimal()
     + theme(
-        figure_size=(4, 3)
+        figure_size=(5.5, 4)
     )
 )
 
@@ -558,7 +566,11 @@ display(chi_square_summary.style.hide(axis="index"))
 
 The chi-square test examines whether penguin species and island are associated. A p-value below 0.05 indicates evidence of an association. The heatmap displays observed counts and Pearson residuals: positive residuals indicate more observations than expected, while negative residuals indicate fewer.
 
-**Statistical caution:** Some expected cell counts are below 5 in this dataset. Therefore, the usual chi-square approximation and its p-value should be interpreted cautiously.
+**Assumption check:** The minimum expected cell count is shown below. Some expected counts are below 5 in this dataset, so the usual chi-square approximation and its p-value should be interpreted cautiously.
+
+```{python}
+print(f"Minimum expected cell count: {minimum_expected:.2f}")
+```
 
 ## Row: Overall Conclusion {height="140px"}
 
