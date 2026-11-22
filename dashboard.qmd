@@ -1,0 +1,523 @@
+
+---
+title: "Palmer Penguins Dashboard"
+subtitle: "Species and Island Distribution Analysis"
+format:
+  dashboard:
+    theme: cosmo
+    orientation: rowsy
+    scrolling: true
+jupyter: python3
+execute:
+  echo: false
+  warning: false
+---
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;500;600;700;800&display=swap');
+
+body, .dashboard, h1, h2, h3, h4, p, div {
+  font-family: 'Lato', sans-serif;
+}
+
+h1, h2, h3, h4 {
+  color: #173F73;
+  font-weight: 700;
+}
+
+.card-header {
+  font-family: 'Lato', sans-serif;
+  color: #173F73;
+  font-weight: 700;
+}
+
+.bslib-value-box,
+.bslib-value-box * {
+  color: #FFFFFF !important;
+}
+
+.bslib-value-box {
+  border: none !important;
+}
+</style>
+
+```{python}
+#| include: false
+
+import pandas as pd
+import numpy as np
+
+from palmerpenguins import load_penguins
+
+from plotnine import (
+    ggplot, aes, geom_col, geom_boxplot, geom_jitter,
+    geom_tile, geom_text, labs, theme_minimal, theme,
+    scale_fill_manual, scale_fill_gradient2
+)
+
+from scipy.stats import kruskal, chi2_contingency
+from IPython.display import display
+
+# Load and clean the dataset
+penguins = load_penguins()
+
+clean = penguins.dropna(
+    subset=["species", "island"]
+).copy()
+
+# Original blue palette
+species_colors = {
+    "Adelie": "#173F73",
+    "Chinstrap": "#438CCB",
+    "Gentoo": "#91C9F2"
+}
+
+island_colors = {
+    "Biscoe": "#173F73",
+    "Dream": "#438CCB",
+    "Torgersen": "#91C9F2"
+}
+
+# Summary statistics
+total_penguins = len(clean)
+total_species = clean["species"].nunique()
+total_islands = clean["island"].nunique()
+
+average_body_mass = clean["body_mass_g"].mean()
+
+# Species frequency
+species_counts = (
+    clean["species"]
+    .value_counts()
+    .rename_axis("species")
+    .reset_index(name="count")
+)
+
+# Island frequency
+island_counts = (
+    clean["island"]
+    .value_counts()
+    .rename_axis("island")
+    .reset_index(name="count")
+)
+
+# Species distribution across islands
+species_island_counts = (
+    clean.groupby(["island", "species"])
+    .size()
+    .reset_index(name="count")
+)
+
+# Body mass data
+body_mass_data = clean.dropna(
+    subset=["body_mass_g"]
+).copy()
+
+# Descriptive statistics by species
+descriptive_stats = (
+    body_mass_data.groupby("species")["body_mass_g"]
+    .agg(
+        Count="count",
+        Mean="mean",
+        Median="median",
+        Standard_Deviation="std",
+        Minimum="min",
+        Maximum="max"
+    )
+    .round(2)
+)
+
+# Overall descriptive statistics
+overall_stats = body_mass_data["body_mass_g"].agg(
+    ["count", "mean", "median", "std", "min", "max"]
+).round(2)
+
+# ------------------------------------------------
+# INFERENTIAL STATISTICS 1: KRUSKAL-WALLIS TEST
+# ------------------------------------------------
+
+species_order = ["Adelie", "Chinstrap", "Gentoo"]
+
+body_mass_groups = [
+    body_mass_data.loc[
+        body_mass_data["species"] == species,
+        "body_mass_g"
+    ].values
+    for species in species_order
+]
+
+kruskal_result = kruskal(*body_mass_groups)
+
+kruskal_h = kruskal_result.statistic
+kruskal_p = kruskal_result.pvalue
+
+number_of_groups = len(body_mass_groups)
+body_mass_sample_size = sum(len(group) for group in body_mass_groups)
+
+# Epsilon-squared effect size
+epsilon_squared = max(
+    0,
+    (kruskal_h - number_of_groups + 1) /
+    (body_mass_sample_size - number_of_groups)
+)
+
+# ------------------------------------------------
+# INFERENTIAL STATISTICS 2: CHI-SQUARE TEST
+# ------------------------------------------------
+
+contingency_table = pd.crosstab(
+    clean["species"],
+    clean["island"]
+)
+
+chi2, chi2_p, degrees_freedom, expected = chi2_contingency(
+    contingency_table
+)
+
+# Cramer's V effect size
+sample_size = contingency_table.to_numpy().sum()
+
+minimum_dimension = min(
+    contingency_table.shape[0] - 1,
+    contingency_table.shape[1] - 1
+)
+
+cramers_v = np.sqrt(
+    chi2 / (sample_size * minimum_dimension)
+)
+
+# Expected counts table
+expected_table = pd.DataFrame(
+    expected,
+    index=contingency_table.index,
+    columns=contingency_table.columns
+)
+
+# Pearson residuals
+pearson_residuals = (
+    contingency_table - expected_table
+) / np.sqrt(expected_table)
+
+# Prepare heatmap data
+residual_data = (
+    pearson_residuals
+    .reset_index()
+    .melt(
+        id_vars="species",
+        var_name="island",
+        value_name="residual"
+    )
+)
+
+observed_data = (
+    contingency_table
+    .reset_index()
+    .melt(
+        id_vars="species",
+        var_name="island",
+        value_name="observed"
+    )
+)
+
+residual_data = residual_data.merge(
+    observed_data,
+    on=["species", "island"]
+)
+
+residual_data["label"] = residual_data.apply(
+    lambda row: (
+        f'{int(row["observed"])}'
+        f'\n({row["residual"]:+.2f})'
+    ),
+    axis=1
+)
+```
+
+## Row: Dashboard Summary
+
+### Total Penguin Observations
+
+```{python}
+#| content: valuebox
+#| title: "Total Penguin Observations"
+#| icon: database
+
+dict(value=f"{total_penguins:,}", color="#173F73")
+```
+
+### Number of Species
+
+```{python}
+#| content: valuebox
+#| title: "Number of Species"
+#| icon: layers
+
+dict(value=str(total_species), color="#286DA8")
+```
+
+### Number of Islands
+
+```{python}
+#| content: valuebox
+#| title: "Number of Islands"
+#| icon: globe
+
+dict(value=str(total_islands), color="#438CCB")
+```
+
+### Average Body Mass
+
+```{python}
+#| content: valuebox
+#| title: "Average Body Mass (g)"
+#| icon: activity
+
+dict(value=f"{average_body_mass:,.1f}", color="#397FB8")
+```
+
+## Row: Penguin Distribution
+
+### Penguin Observations by Species
+
+```{python}
+species_plot = (
+    ggplot(
+        species_counts,
+        aes(x="species", y="count", fill="species")
+    )
+    + geom_col(width=0.7)
+    + scale_fill_manual(values=species_colors)
+    + labs(
+        title="Penguin Observations by Species",
+        x="Penguin Species",
+        y="Number of Observations"
+    )
+    + theme_minimal()
+    + theme(legend_position="none")
+)
+
+species_plot
+```
+
+Adelie penguins have the highest number of observations, followed by Gentoo and Chinstrap. This indicates that Adelie penguins are the most frequently represented species in the dataset.
+
+### Total Penguin Observations by Island
+
+```{python}
+island_plot = (
+    ggplot(
+        island_counts,
+        aes(x="island", y="count", fill="island")
+    )
+    + geom_col(width=0.7)
+    + scale_fill_manual(values=island_colors)
+    + labs(
+        title="Penguin Observations by Island",
+        x="Island",
+        y="Number of Observations"
+    )
+    + theme_minimal()
+    + theme(legend_position="none")
+)
+
+island_plot
+```
+
+Biscoe Island has the highest number of recorded penguins, followed by Dream and Torgersen. This shows that the dataset contains more observations from Biscoe Island than from the other two islands.
+
+### Species Distribution Across Islands
+
+```{python}
+island_species_plot = (
+    ggplot(
+        species_island_counts,
+        aes(x="island", y="count", fill="species")
+    )
+    + geom_col()
+    + scale_fill_manual(values=species_colors)
+    + labs(
+        title="Species Distribution Across Islands",
+        x="Island",
+        y="Number of Penguins",
+        fill="Species"
+    )
+    + theme_minimal()
+)
+
+island_species_plot
+```
+
+Adelie penguins are recorded on all three islands, while Gentoo penguins are found only on Biscoe Island and Chinstrap penguins only on Dream Island in this dataset. This illustrates how species representation varies across the islands.
+
+## Row: Descriptive Statistics
+
+### Body Mass Summary by Species
+
+```{python}
+display(
+    descriptive_stats.rename(columns={
+        "Standard_Deviation": "Standard Deviation"
+    })
+)
+```
+
+The table presents the count, mean, median, standard deviation, minimum, and maximum body mass for each penguin species. These measurements describe the typical body mass and variation within each group.
+
+### Overall Body Mass Statistics
+
+```{python}
+display(
+    overall_stats.to_frame(name="Overall Body Mass")
+)
+```
+
+The overall statistics summarize body mass across all penguins with available measurements. The mean and median describe the center of the data, while the standard deviation and range describe its variability.
+
+## Row: Inferential Statistics
+
+### 1. Kruskal-Wallis Test: Body Mass Differences Among Species
+
+```{python}
+body_mass_plot = (
+    ggplot(
+        body_mass_data,
+        aes(
+            x="species",
+            y="body_mass_g",
+            fill="species"
+        )
+    )
+    + geom_boxplot(alpha=0.85, width=0.65)
+    + geom_jitter(
+        width=0.15,
+        alpha=0.35,
+        size=1.5,
+        color="#173F73"
+    )
+    + scale_fill_manual(values=species_colors)
+    + labs(
+        title="Body Mass Distribution by Penguin Species",
+        subtitle="Kruskal-Wallis comparison",
+        x="Penguin Species",
+        y="Body Mass (grams)"
+    )
+    + theme_minimal()
+    + theme(legend_position="none")
+)
+
+body_mass_plot
+```
+
+**Statistical results**
+
+```{python}
+kruskal_summary = pd.DataFrame({
+    "Metric": [
+        "H-statistic",
+        "P-value",
+        "Epsilon-squared effect size",
+        "Significance level"
+    ],
+    "Result": [
+        f"{kruskal_h:.4f}",
+        f"{kruskal_p:.6g}",
+        f"{epsilon_squared:.4f}",
+        "0.05"
+    ]
+})
+
+display(kruskal_summary)
+```
+
+**Interpretation**
+
+The Kruskal-Wallis test examines whether body mass distributions differ among Adelie, Chinstrap, and Gentoo penguins. If the p-value is below 0.05, we reject the null hypothesis and conclude that there is evidence of a difference in body mass distributions among at least two species. The test does not identify which specific species differ; additional pairwise testing would be needed for that.
+
+### 2. Chi-Square Test: Association Between Species and Island
+
+```{python}
+chi_square_plot = (
+    ggplot(
+        residual_data,
+        aes(
+            x="island",
+            y="species",
+            fill="residual"
+        )
+    )
+    + geom_tile(color="white")
+    + geom_text(
+        aes(label="label"),
+        size=8,
+        color="#173F73"
+    )
+    + scale_fill_gradient2(
+        low="#91C9F2",
+        mid="#FFFFFF",
+        high="#173F73",
+        midpoint=0
+    )
+    + labs(
+        title="Species and Island Association",
+        subtitle="Observed counts and Pearson residuals",
+        x="Island",
+        y="Penguin Species",
+        fill="Pearson Residual"
+    )
+    + theme_minimal()
+)
+
+chi_square_plot
+```
+
+**Statistical results**
+
+```{python}
+chi_square_summary = pd.DataFrame({
+    "Metric": [
+        "Chi-square statistic",
+        "Degrees of freedom",
+        "P-value",
+        "Cramer's V effect size",
+        "Significance level"
+    ],
+    "Result": [
+        f"{chi2:.4f}",
+        str(degrees_freedom),
+        f"{chi2_p:.6g}",
+        f"{cramers_v:.4f}",
+        "0.05"
+    ]
+})
+
+display(chi_square_summary)
+```
+
+**Interpretation**
+
+The chi-square test of independence examines whether penguin species and island are associated. If the p-value is below 0.05, we reject the null hypothesis and conclude that there is evidence of an association between species and island. The heatmap shows Pearson residuals: positive values indicate more observations than expected, while negative values indicate fewer observations than expected under independence.
+
+### Chi-Square Assumption Check
+
+```{python}
+minimum_expected = expected.min()
+
+print(
+    f"Minimum expected cell count: {minimum_expected:.2f}"
+)
+
+if minimum_expected >= 5:
+    print(
+        "The expected-count condition is satisfied "
+        "for the usual chi-square approximation."
+    )
+else:
+    print(
+        "Some expected counts are below 5. "
+        "Interpret the chi-square approximation with caution."
+    )
+```
+
+## Row: Overall Statistical Conclusion
+
+The Palmer Penguins dataset shows differences in species frequency, island distribution, and body mass. Descriptive statistics summarize these patterns, while the Kruskal-Wallis and chi-square tests help assess whether the observed body mass differences and species-island association are statistically significant. These results describe patterns in the available dataset and should not be interpreted as proof of causation.
