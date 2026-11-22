@@ -1,0 +1,6 @@
+palmerpenguins
+plotnine
+pandas
+numpy
+jupyter
+scipy
